@@ -1,0 +1,29 @@
+
+public class ProducerConsumer {
+
+	public static void main(String[] args) {
+		
+	}
+
+}
+class Producer implements Runnable {
+	public int[] queue;
+	public Producer(int[] queue) {
+		this.queue = queue;
+	}
+	
+	public void run() {
+		
+	}
+
+}
+
+class Consumer implements Runnable {
+	public int[] queue;
+	public Consumer(int[] queue) {
+		this.queue = queue;
+	}
+	public void run() {
+		
+	}
+}

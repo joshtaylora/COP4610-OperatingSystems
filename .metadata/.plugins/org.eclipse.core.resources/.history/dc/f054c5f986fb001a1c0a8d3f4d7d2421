@@ -1,0 +1,12 @@
+
+public class ProducerConsumer implements Runnable{
+
+	public void produce() {
+		
+	}
+	public static void main(String[] args) {
+		
+	}
+
+}
+
