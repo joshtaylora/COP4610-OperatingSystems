@@ -1,127 +1,119 @@
 import java.util.concurrent.*;
-import java.util.concurrent.locks.*;
 
 public class ProducerConsumer {
-	// initialize the buffer that producer and consumer tasks will access
-	private static PCBuffer buffer = new PCBuffer(10);
+	private static ArrayBlockingQueue<Integer> buffer = new ArrayBlockingQueue<>(10);
+	
+	public static void main(String[] args) throws InterruptedException {
+		ProducerTask producerTask = new ProducerTask(buffer);
+		ConsumerTask consumerTask = new ConsumerTask(buffer);
 
-	public static void main(String[] args) {
+		// create threads for the producer and consumer tasks we created
+		Thread producerThread = new Thread(producerTask); // will use the run() method of ProducerTask
+		Thread consumerThread = new Thread(consumerTask); // will use the run() method of ConsumerTask
 
-		ExecutorService executor = Executors.newFixedThreadPool(2);
-		executor.execute(new ProducerTask());
-		executor.execute(new ConsumerTask());
-		executor.shutdown();
-		/*
-		// create threads for the producer and consumer tasks
-		Thread producerThread = new Thread(new ProducerTask(buffer)); // will use the run() method of ProducerTask
-		Thread consumerThread = new Thread(new ConsumerTask(buffer)); // will use the run() method of ConsumerTask
-
-		//call the run method for the consumer thread's task (we call this before running the producerThread
-		//because the consumer thread calls wait on the producer thread so we immediately shift to the
-		//producer thread to begin populating the elements of the buffer before using notifyAll to
-		//return execution to the consumer thread)
+		/* call the run method for the consumer thread's task (we call this before running the producerThread
+		because the consumer thread calls wait on the producer thread so we immediately shift to the
+		producer thread to begin populating the elements of the buffer before using notifyAll to
+		return execution to the consumer thread) */
 		consumerThread.start();
 		// call the run method of the producer thread's task
 		producerThread.start();
-
-		producerThread.join();
+		/*
+		while(consumerThread.isAlive() == true || producerThread.isAlive() == true) {
+            System.out.println("\nRetrieving Thread States...\nConsumer Thread State: " 
+            		+consumerThread.getState()+"\nProducer Thread State: "+producerThread.getState() + "\n");
+        }
 		*/
+		producerThread.join();
+		consumerThread.join();
+	}
+}
 
+class ProducerTask extends Thread {
+	// create the buffer using ArrayBlockingQueue so we can handle attempts to access outside the capacity
+	ArrayBlockingQueue<Integer> buffer;
+
+	ProducerTask(ArrayBlockingQueue<Integer> buffer) {
+		this.buffer = buffer; 
 	}
 
-
-	private static class ProducerTask implements Runnable {
-		@Override
-		public void run() {
+	public void run() {
+		// have a synchronized block that controls access to the buffer
+		synchronized (buffer) {
+			/*
 			try {
-				while (true) {
-					buffer.produce();
-					Thread.sleep(1000);
-				}
+				buffer.wait();
 			}
 			catch (Exception e) {
 				e.printStackTrace();
 			}
-		}
-	}
-
-	private static class ConsumerTask implements Runnable {
-		@Override
-		public void run() {
-			try {
-				while (true) {
-					buffer.consume();
+			*/
+			// populate the buffer with incremental numbers starting from 0 until the buffer is full
+			int counter = buffer.remainingCapacity();
+			System.out.println("Producing " + counter + " elements in the buffer");
+			for (int i = 0; i < counter; i++) {
+				try {
+					buffer.add(i);
+					System.out.println("Produced " + i);
+				}
+				catch (Exception e) {
+					e.printStackTrace();
 				}
 			}
-			catch(Exception e){
-				e.printStackTrace();
-			}
-		}
-
-	}
-	private static class PCBuffer extends ArrayBlockingQueue<Integer> {
-		public PCBuffer(int capacity) {
-			super(capacity);
-		}
-		private static Lock lock = new ReentrantLock();
-
-		private static Condition isFull = lock.newCondition();
-		private static Condition isEmpty = lock.newCondition();
-
-		public void consume() {
-			// acquire the lock
-			lock.lock();
-			try {
-				while (this.size() == 0) {
-					System.out.println("Buffer is EMPTY, must produce before attempting to consume again");
-					isEmpty.await();
-				}
-				Integer queuePoll = this.poll();
-				while (queuePoll != null) {
-					try {
-						System.out.println("Consumed " + queuePoll);
-						queuePoll = this.poll();
-					} catch (NullPointerException e) {
-						e.printStackTrace();
-					}
-				}
-				System.out.println("Buffer is now EMPTY");
-				isEmpty.signalAll();
-			}
-			catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-			finally {
-				lock.unlock();
-			}
-		}
-
-		public void produce() {
-			// acquire the lock
-			lock.lock();
-			try {
-				while(this.remainingCapacity() == 0) {
-					System.out.println("Buffer is FULL, must consume before attempting to produce again");
-					isFull.await();
-				}
-				for (int i = 0; i < 10; i++) {
-					try {
-						this.add(i);
-						System.out.println("Produced " + i);
-					}
-					catch (Exception e) {
-						e.printStackTrace();
-					}
-				}
+			if (buffer.remainingCapacity() == 0) {
 				System.out.println("Buffer is now FULL");
-				isFull.signalAll();
 			}
-			catch (InterruptedException e) {
+			else {
+				System.out.println("Buffer is not full, you can add " + buffer.remainingCapacity() + " more elements");
+			}
+			System.out.println("Buffer elements after produce: " + buffer);
+			// returns execution to the consumer thread
+			buffer.notifyAll();
+		}
+	}
+}
+
+class ConsumerTask extends Thread {
+
+	ArrayBlockingQueue<Integer> buffer;
+
+	ConsumerTask(ArrayBlockingQueue<Integer> buffer) {
+		this.buffer = buffer;
+	}
+
+	public void run() {
+		synchronized (buffer) {
+			try {
+				// causes the consumer thread to wait for the producer thread to invoke the notifyAll method
+				// after it populates the contents of the buffer
+				//System.out.println("\tConsumer Thread now waiting");
+				buffer.wait();
+			}
+			catch (Exception e) {
 				e.printStackTrace();
 			}
-			finally {
-				lock.unlock();
+			int counter = buffer.size();
+			System.out.println("Consuming " + counter + " elements in the buffer");
+			Integer queuePoll = 0;
+			// removes and returns all of the elements in the buffer
+			while (queuePoll != null && (counter > 0)) {
+				try {
+					queuePoll = buffer.poll();
+					System.out.println("Consumed " + queuePoll);
+				}
+				catch (NullPointerException e) {
+					e.printStackTrace();
+				}
+				counter--;
 			}
+			if (buffer.size() == 0) {
+				// at the end of the while loop we have successfully removed all of the elements of the buffer
+				System.out.println("Buffer is now EMPTY");
+			}
+			else {
+				System.out.println("Buffer is not empty, can still consume " + buffer.size() + " elements");
+			}
+			System.out.println("Buffer elements after consume: " + buffer);
 		}
 	}
 }
